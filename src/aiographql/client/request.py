@@ -2,9 +2,10 @@ from __future__ import annotations
 
 from copy import deepcopy
 from dataclasses import InitVar, asdict, dataclass, field, replace
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List, Optional
 
 import ujson as json
+from mashumaro.mixins.json import DataClassJSONMixin
 
 
 @dataclass(frozen=True)
@@ -57,6 +58,13 @@ class GraphQLRequest:
             if v is not None and k not in {"schema", "headers", "validate"}
         }
 
+    def _prepare_val(self, v: Any) -> Dict[str, Any]:
+        if isinstance(v, DataClassJSONMixin):
+            if hasattr(v, "Config"):
+                return v.to_dict(omit_none=True)
+            return v.to_dict()
+        return v
+
     def copy(
         self,
         headers: Optional[Dict[str, str]] = None,
@@ -64,10 +72,22 @@ class GraphQLRequest:
         operation: Optional[str] = None,
         variables: Optional[Dict[str, Any]] = None,
     ) -> GraphQLRequest:
+
+        final: Dict[str, Any] = {}
+        if self.variables is not None:
+            for k, v in self.variables.items():
+                if isinstance(v, list):
+                    res: List[Any] = []
+                    for item in v:
+                        res.append(self._prepare_val(item))
+                    final[k] = res
+                else:
+                    final[k] = self._prepare_val(v)
+
         return replace(
             self,
             operation=operation or self.operationName,
-            variables={**deepcopy(self.variables), **(variables or dict())},
+            variables={**deepcopy(self.variables), **(final)},
             headers={
                 **(headers_fallback or dict()),
                 **self.headers,
