@@ -204,7 +204,13 @@ class GraphQLClient:
         async with session.request(
             method=method, url=self.endpoint, headers=request.headers, **kwargs
         ) as resp:
-            body = await resp.json()
+            try:
+                body = await resp.json()
+            except aiohttp.client_exceptions.ContentTypeError as e:
+                raise GraphQLClientException(
+                    f"Request failed before getting to GraphQL with response {resp}"
+                ) from e
+
             response = GraphQLResponse(request=request, json=body)
 
             if 200 <= resp.status < 300:
